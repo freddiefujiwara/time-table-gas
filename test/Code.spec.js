@@ -214,4 +214,40 @@ describe('Code.js', () => {
       });
     });
   });
+
+  describe('refreshMessageText', () => {
+    const mockSetValues = vi.fn();
+
+    beforeEach(() => {
+      mockGetDataRange.mockReturnValue({
+        getValues: mockGetValues,
+        setValues: mockSetValues,
+      });
+    });
+
+    it('should clean spaces and log/update non-empty messages', () => {
+      const date = new Date();
+      mockGetValues.mockReturnValue([
+        [date, '  hello  world  '],
+        [date, '　全角　スペース　'],
+        [date, '   '],
+        [date, ''],
+        [date, 123],
+      ]);
+
+      Code.refreshMessageText();
+
+      expect(mockLog).toHaveBeenCalledWith('helloworld');
+      expect(mockLog).toHaveBeenCalledWith('全角スペース');
+      expect(mockLog).toHaveBeenCalledTimes(2);
+
+      expect(mockSetValues).toHaveBeenCalledWith([
+        [date, 'helloworld'],
+        [date, '全角スペース'],
+        [date, '   '],
+        [date, ''],
+        [date, 123],
+      ]);
+    });
+  });
 });

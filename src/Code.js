@@ -123,3 +123,26 @@ export function callSpeakerApi(message) {
     }
   );
 }
+
+/**
+ * Cleans spaces from the message text and updates the spreadsheet if not empty.
+ */
+export function refreshMessageText() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const range = sheet.getDataRange();
+  const values = range.getValues();
+
+  const updatedValues = values.map(row => {
+    const [scheduledTime, messageText] = row;
+    if (typeof messageText !== 'string') return row;
+
+    const cleaned = messageText.replace(/[\s\u3000]/g, '');
+    if (cleaned !== '') {
+      Logger.log(cleaned);
+      return [scheduledTime, cleaned];
+    }
+    return row;
+  });
+
+  range.setValues(updatedValues);
+}
