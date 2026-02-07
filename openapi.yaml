@@ -4,7 +4,7 @@ info:
   description: API for retrieving scheduled tasks from a Google Spreadsheet, managed by a Google Apps Script.
   version: 1.0.0
 servers:
-  - url: https://script.google.com/macros/s/{deployment-id}/exec
+  - url: https://script.google.com/macros/s/AKfycbx3ieeSBJbTF27aEd49BQAnwlGjuk8Juk93SxTb5T2kmJymHeYlJLORzOCEXMMut3yEtQ/exec
     description: Google Apps Script Web App URL
 paths:
   /:
