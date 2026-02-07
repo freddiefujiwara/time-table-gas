@@ -9,6 +9,8 @@ describe('Code.js', () => {
   const mockLog = vi.fn();
   const mockCreateTextOutput = vi.fn();
   const mockSetMimeType = vi.fn();
+  const mockGetScriptProperties = vi.fn();
+  const mockGetProperty = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -37,6 +39,13 @@ describe('Code.js', () => {
       MimeType: {
         JSON: 'application/json',
       },
+    });
+
+    vi.stubGlobal('PropertiesService', {
+      getScriptProperties: mockGetScriptProperties,
+    });
+    mockGetScriptProperties.mockReturnValue({
+      getProperty: mockGetProperty,
     });
     mockCreateTextOutput.mockReturnValue({
       setMimeType: mockSetMimeType,
@@ -182,6 +191,57 @@ describe('Code.js', () => {
       const message = 'テスト';
       Code.callSpeakerApi(message);
       expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining(encodeURIComponent(message)), expect.anything());
+    });
+  });
+
+  describe('callGroq', () => {
+    it('should return content from Groq API on success', () => {
+      mockGetProperty.mockReturnValue('test-api-key');
+      const mockResponse = {
+        choices: [{ message: { content: 'Groq response' } }]
+      };
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify(mockResponse)
+      });
+
+      const result = Code.callGroq('test prompt');
+
+      expect(result).toBe('Groq response');
+      expect(mockGetProperty).toHaveBeenCalledWith('GROQ_API_KEY');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.groq.com/openai/v1/chat/completions',
+        expect.objectContaining({
+          method: 'post',
+          headers: { Authorization: 'Bearer test-api-key' },
+          payload: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: [{ role: 'user', content: 'test prompt' }],
+            temperature: 0.7
+          })
+        })
+      );
+    });
+
+    it('should return error message on failure', () => {
+      mockGetProperty.mockReturnValue('test-api-key');
+      mockFetch.mockImplementation(() => {
+        throw new Error('Fetch failed');
+      });
+
+      const result = Code.callGroq('test prompt');
+
+      expect(result).toBe('Error: Error: Fetch failed');
+    });
+
+    it('should return error message on invalid JSON response', () => {
+      mockGetProperty.mockReturnValue('test-api-key');
+      mockFetch.mockReturnValue({
+        getContentText: () => 'invalid json'
+      });
+
+      const result = Code.callGroq('test prompt');
+
+      expect(result).toContain('Error: SyntaxError');
     });
   });
 

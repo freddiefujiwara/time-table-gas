@@ -148,3 +148,33 @@ export function refreshMessageText() {
 
   range.setValues(updatedValues);
 }
+
+/**
+ * Groq API call
+ */
+export function callGroq(prompt) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
+  const apiUrl = "https://api.groq.com/openai/v1/chat/completions";
+
+  const payload = {
+    "model": "llama-3.3-70b-versatile",
+    "messages": [{"role": "user", "content": prompt}],
+    "temperature": 0.7
+  };
+
+  const options = {
+    "method": "post",
+    "contentType": "application/json",
+    "headers": { "Authorization": "Bearer " + apiKey },
+    "payload": JSON.stringify(payload),
+    "muteHttpExceptions": true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(apiUrl, options);
+    const json = JSON.parse(response.getContentText());
+    return json.choices[0].message.content;
+  } catch (e) {
+    return "Error: " + e.toString();
+  }
+}
