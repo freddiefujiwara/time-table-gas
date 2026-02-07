@@ -272,12 +272,13 @@ describe('Code.js', () => {
 
       Code.refreshMessageText();
 
-      expect(mockLog).toHaveBeenCalledWith('rephrased result');
+      expect(mockLog).toHaveBeenCalledWith('hello -> rephrased result');
+      expect(mockLog).toHaveBeenCalledWith('全角 -> rephrased result');
       expect(mockLog).toHaveBeenCalledTimes(2);
 
       expect(mockSetValues).toHaveBeenCalledWith([
-        [date, 'hello', 'extra1'],
-        [date, '全角', 'extra2', 'extra3'],
+        [date, 'rephrased result', 'extra1'],
+        [date, 'rephrased result', 'extra2', 'extra3'],
         [date, 123, 'not a string'],
         [date, '   ', 'only spaces'],
       ]);

@@ -141,8 +141,8 @@ export function refreshMessageText() {
     const cleaned = messageText.replace(/[\s\u3000]/g, '');
     if (cleaned !== '') {
       const rephrased = callGroq(`${cleaned}」を似たニュアンスで言い換えた文言のみ返せ。解説不要。`);
-      Logger.log(rephrased);
-      return [scheduledTime, cleaned, ...rest];
+      Logger.log(`${cleaned} -> ${rephrased}`);
+      return [scheduledTime, rephrased, ...rest];
     }
     return row;
   });
