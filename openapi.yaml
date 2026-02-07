@@ -1,0 +1,34 @@
+openapi: 3.0.0
+info:
+  title: Groq GAS Scheduled Tasks API
+  description: API for retrieving scheduled tasks from a Google Spreadsheet, managed by a Google Apps Script.
+  version: 1.0.0
+servers:
+  - url: https://script.google.com/macros/s/AKfycbx3ieeSBJbTF27aEd49BQAnwlGjuk8Juk93SxTb5T2kmJymHeYlJLORzOCEXMMut3yEtQ/exec
+    description: Google Apps Script Web App URL
+paths:
+  /:
+    get:
+      summary: Get all scheduled tasks
+      description: Retrieves a list of valid scheduled tasks from the linked spreadsheet.
+      responses:
+        '200':
+          description: A JSON array of scheduled tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+components:
+  schemas:
+    Task:
+      type: object
+      properties:
+        scheduledTime:
+          type: string
+          format: date-time
+          description: The ISO 8601 string representation of the scheduled time.
+        messageText:
+          type: string
+          description: The text to be spoken or processed.
