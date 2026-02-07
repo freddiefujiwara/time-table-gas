@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { myFunction, API_URL } from '../src/Code.js';
+import * as Code from '../src/Code.js';
 
-describe('myFunction', () => {
+describe('Code.js', () => {
   const mockGetActiveSheet = vi.fn();
   const mockGetDataRange = vi.fn();
   const mockGetValues = vi.fn();
@@ -31,128 +31,155 @@ describe('myFunction', () => {
     });
   });
 
-  it('should skip rows with invalid data', () => {
-    const now = new Date('2023-10-01T10:00:00');
-    vi.setSystemTime(now);
+  describe('myFunction and processScheduledTasks', () => {
+    it('should call processScheduledTasks through myFunction', () => {
+      // We can't easily mock exported functions in the same module when they call each other directly
+      // but we can verify the end-to-end behavior.
+      const now = new Date('2023-10-01T10:00:00');
+      vi.setSystemTime(now);
+      mockGetValues.mockReturnValue([[now, 'test']]);
+      mockFetch.mockReturnValue({
+        getResponseCode: () => 200,
+        getContentText: () => 'OK',
+      });
 
-    mockGetValues.mockReturnValue([
-      ['not a date', 'message'], // Invalid date
-      [new Date('2023-10-01T10:00:00'), ''], // Empty text
-      [null, 'message'], // Null date
-    ]);
+      Code.myFunction();
 
-    myFunction();
-
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it('should skip rows where time is outside threshold', () => {
-    const now = new Date('2023-10-01T10:00:00');
-    vi.setSystemTime(now);
-
-    const farTime = new Date('2023-10-01T10:01:00'); // 60 seconds diff > 35s
-
-    mockGetValues.mockReturnValue([
-      [farTime, 'too far'],
-    ]);
-
-    myFunction();
-
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it('should call fetch when time is within threshold (minutes case)', () => {
-    const now = new Date('2023-10-01T10:05:00');
-    vi.setSystemTime(now);
-
-    const sheetTime = new Date('2023-10-01T10:05:10'); // 10 seconds diff < 35s
-    const text = 'hello';
-
-    mockGetValues.mockReturnValue([
-      [sheetTime, text],
-    ]);
-    mockFetch.mockReturnValue({
-      getResponseCode: () => 200,
-      getContentText: () => 'OK',
+      expect(mockFetch).toHaveBeenCalled();
     });
 
-    myFunction();
+    it('should process multiple valid rows within threshold', () => {
+      const now = new Date('2023-10-01T10:00:00');
+      vi.setSystemTime(now);
 
-    const expectedMessage = `10時5分です。${text}`;
-    const expectedUrl = API_URL + encodeURIComponent(expectedMessage);
+      mockGetValues.mockReturnValue([
+        [new Date('2023-10-01T10:00:00'), 'msg1'],
+        [new Date('2023-10-01T10:00:10'), 'msg2'],
+      ]);
+      mockFetch.mockReturnValue({
+        getResponseCode: () => 200,
+        getContentText: () => 'OK',
+      });
 
-    expect(mockFetch).toHaveBeenCalledWith(expectedUrl, {
-      method: 'get',
-      muteHttpExceptions: true,
+      Code.processScheduledTasks();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockLog).toHaveBeenCalledTimes(2);
     });
-    expect(mockLog).toHaveBeenCalledWith(expect.stringContaining(expectedMessage));
+
+    it('should skip invalid or out-of-threshold tasks', () => {
+      const now = new Date('2023-10-01T10:00:00');
+      vi.setSystemTime(now);
+
+      mockGetValues.mockReturnValue([
+        ['not a date', 'msg1'], // invalid task
+        [new Date('2023-10-01T10:01:00'), 'msg2'], // out of threshold
+      ]);
+
+      Code.processScheduledTasks();
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
   });
 
-  it('should use "ちょうど" when minutes is 0', () => {
-    const now = new Date('2023-10-01T10:00:00');
-    vi.setSystemTime(now);
-
-    mockGetValues.mockReturnValue([
-      [new Date('2023-10-01T10:00:00'), 'test'],
-    ]);
-    mockFetch.mockReturnValue({
-      getResponseCode: () => 200,
-      getContentText: () => 'OK',
+  describe('isValidTask', () => {
+    it('should return true for valid date and text', () => {
+      expect(Code.isValidTask(new Date(), 'hello')).toBe(true);
     });
 
-    myFunction();
+    it('should return false if scheduledTime is not a Date', () => {
+      expect(Code.isValidTask('2023-10-01', 'hello')).toBe(false);
+      expect(Code.isValidTask(null, 'hello')).toBe(false);
+    });
 
-    expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining(encodeURIComponent('10時ちょうどです。test')), expect.anything());
+    it('should return false if messageText is empty', () => {
+      expect(Code.isValidTask(new Date(), '')).toBe(false);
+      expect(Code.isValidTask(new Date(), null)).toBe(false);
+    });
   });
 
-  it('should handle 12-hour format (0 hour -> 12)', () => {
-    const now = new Date('2023-10-01T00:00:00');
-    vi.setSystemTime(now);
+  describe('getTargetTimeToday', () => {
+    it('should return a date with today\'s year/month/day and scheduled hour/min/sec', () => {
+      const now = new Date('2023-12-25T10:00:00');
+      const scheduled = new Date('2000-01-01T15:30:45');
+      const result = Code.getTargetTimeToday(now, scheduled);
 
-    mockGetValues.mockReturnValue([
-      [new Date('2023-10-01T00:00:00'), 'midnight'],
-    ]);
-    mockFetch.mockReturnValue({
-      getResponseCode: () => 200,
-      getContentText: () => 'OK',
+      expect(result.getFullYear()).toBe(2023);
+      expect(result.getMonth()).toBe(11); // December is 11
+      expect(result.getDate()).toBe(25);
+      expect(result.getHours()).toBe(15);
+      expect(result.getMinutes()).toBe(30);
+      expect(result.getSeconds()).toBe(45);
+      expect(result.getMilliseconds()).toBe(0);
     });
-
-    myFunction();
-
-    expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining(encodeURIComponent('12時ちょうどです。midnight')), expect.anything());
   });
 
-  it('should handle 12-hour format (12 hour -> 12)', () => {
-    const now = new Date('2023-10-01T12:00:00');
-    vi.setSystemTime(now);
+  describe('isTimeWithinThreshold', () => {
+    const threshold = 35000;
 
-    mockGetValues.mockReturnValue([
-      [new Date('2023-10-01T12:00:00'), 'noon'],
-    ]);
-    mockFetch.mockReturnValue({
-      getResponseCode: () => 200,
-      getContentText: () => 'OK',
+    it('should return true if difference is within threshold', () => {
+      const now = new Date(100000);
+      const target = new Date(135000);
+      expect(Code.isTimeWithinThreshold(now, target, threshold)).toBe(true);
     });
 
-    myFunction();
+    it('should return true if difference is exactly the threshold', () => {
+      const now = new Date(100000);
+      const target = new Date(135000);
+      expect(Code.isTimeWithinThreshold(now, target, 35000)).toBe(true);
+    });
 
-    expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining(encodeURIComponent('12時ちょうどです。noon')), expect.anything());
+    it('should return false if difference exceeds threshold', () => {
+      const now = new Date(100000);
+      const target = new Date(135001);
+      expect(Code.isTimeWithinThreshold(now, target, threshold)).toBe(false);
+    });
+
+    it('should handle negative difference (target before now)', () => {
+      const now = new Date(100000);
+      const target = new Date(65000);
+      expect(Code.isTimeWithinThreshold(now, target, threshold)).toBe(true);
+    });
   });
 
-  it('should handle 12-hour format (13 hour -> 1)', () => {
-    const now = new Date('2023-10-01T13:00:00');
-    vi.setSystemTime(now);
-
-    mockGetValues.mockReturnValue([
-      [new Date('2023-10-01T13:00:00'), 'afternoon'],
-    ]);
-    mockFetch.mockReturnValue({
-      getResponseCode: () => 200,
-      getContentText: () => 'OK',
+  describe('buildSpeakingMessage', () => {
+    it('should format 0 minutes as "ちょうど"', () => {
+      const time = new Date('2023-10-01T10:00:00');
+      expect(Code.buildSpeakingMessage(time, 'hello')).toBe('10時ちょうどです。hello');
     });
 
-    myFunction();
+    it('should format non-zero minutes correctly', () => {
+      const time = new Date('2023-10-01T10:05:00');
+      expect(Code.buildSpeakingMessage(time, 'hello')).toBe('10時5分です。hello');
+    });
 
-    expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining(encodeURIComponent('1時ちょうどです。afternoon')), expect.anything());
+    it('should convert 0 hour to 12', () => {
+      const time = new Date('2023-10-01T00:00:00');
+      expect(Code.buildSpeakingMessage(time, 'hello')).toBe('12時ちょうどです。hello');
+    });
+
+    it('should convert 12 hour to 12', () => {
+      const time = new Date('2023-10-01T12:00:00');
+      expect(Code.buildSpeakingMessage(time, 'hello')).toBe('12時ちょうどです。hello');
+    });
+
+    it('should convert 13 hour to 1', () => {
+      const time = new Date('2023-10-01T13:00:00');
+      expect(Code.buildSpeakingMessage(time, 'hello')).toBe('1時ちょうどです。hello');
+    });
+  });
+
+  describe('callSpeakerApi', () => {
+    it('should call fetch with correct URL and options', () => {
+      mockFetch.mockReturnValue({ response: 'ok' });
+      const message = 'テストメッセージ';
+      Code.callSpeakerApi(message);
+
+      const expectedUrl = Code.API_URL + encodeURIComponent(message);
+      expect(mockFetch).toHaveBeenCalledWith(expectedUrl, {
+        method: 'get',
+        muteHttpExceptions: true,
+      });
+    });
   });
 });

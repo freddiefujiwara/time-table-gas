@@ -1,60 +1,107 @@
-// Base URL for Google Home speaker API
+/**
+ * Base URL for Google Home speaker API
+ */
 export const API_URL = 'http://a.ze.gs/google-home-speaker-wrapper/-h/192.168.1.22/-v/60/-s/';
 
-// Allow time difference (35 seconds)
-export const THRESHOLD = 35 * 1000;
+/**
+ * Allow time difference (35 seconds)
+ */
+export const THRESHOLD_MS = 35 * 1000;
 
+/**
+ * Main entry point for the script
+ */
 export function myFunction() {
+  processScheduledTasks();
+}
 
-  // Get current time
+/**
+ * Reads the spreadsheet and processes tasks that should be spoken
+ */
+export function processScheduledTasks() {
   const now = new Date();
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const rows = sheet.getDataRange().getValues();
 
-  // Read all rows from the sheet
-  SpreadsheetApp
-    .getActiveSheet()
-    .getDataRange()
-    .getValues()
-    .forEach(r => {
+  rows.forEach(([scheduledTime, messageText]) => {
+    if (!isValidTask(scheduledTime, messageText)) {
+      return;
+    }
 
-      // r[0] = time, r[1] = text
-      // Skip if time is not Date or text is empty
-      if (!(r[0] instanceof Date) || !r[1]) return;
+    const targetTime = getTargetTimeToday(now, scheduledTime);
+    if (!isTimeWithinThreshold(now, targetTime, THRESHOLD_MS)) {
+      return;
+    }
 
-      // Make "today at this time"
-      const t = new Date(now);
+    const message = buildSpeakingMessage(targetTime, messageText);
+    const response = callSpeakerApi(message);
 
-      // Copy hour, minute, second from the sheet time
-      t.setHours(
-        r[0].getHours(),
-        r[0].getMinutes(),
-        r[0].getSeconds(),
-        0
-      );
+    Logger.log(`Response (${response.getResponseCode()}): ${response.getContentText()} : ${message}`);
+  });
+}
 
-      // Skip if time is too far from now
-      if (Math.abs(now - t) > THRESHOLD) return;
+/**
+ * Validates if the row contains a valid date and message text
+ * @param {any} scheduledTime
+ * @param {any} messageText
+ * @returns {boolean}
+ */
+export function isValidTask(scheduledTime, messageText) {
+  return (scheduledTime instanceof Date) && !!messageText;
+}
 
-      // Change hour to 12-hour format
-      const h = t.getHours() % 12 || 12;
+/**
+ * Creates a Date object for today with the hours, minutes, and seconds from the scheduled time
+ * @param {Date} now
+ * @param {Date} scheduledTime
+ * @returns {Date}
+ */
+export function getTargetTimeToday(now, scheduledTime) {
+  const target = new Date(now);
+  target.setHours(
+    scheduledTime.getHours(),
+    scheduledTime.getMinutes(),
+    scheduledTime.getSeconds(),
+    0
+  );
+  return target;
+}
 
-      // Get minutes
-      const m = t.getMinutes();
+/**
+ * Checks if the difference between now and target time is within the threshold
+ * @param {Date} now
+ * @param {Date} targetTime
+ * @param {number} threshold
+ * @returns {boolean}
+ */
+export function isTimeWithinThreshold(now, targetTime, threshold) {
+  return Math.abs(now.getTime() - targetTime.getTime()) <= threshold;
+}
 
-      // Make message for speaker
-      const message =
-        `${h}時${m ? m + '分' : 'ちょうど'}です。${r[1]}`;
+/**
+ * Builds the message to be spoken by the speaker
+ * @param {Date} time
+ * @param {string} text
+ * @returns {string}
+ */
+export function buildSpeakingMessage(time, text) {
+  const hour = time.getHours() % 12 || 12;
+  const minute = time.getMinutes();
+  const minutePart = minute ? `${minute}分` : 'ちょうど';
+  return `${hour}時${minutePart}です。${text}`;
+}
 
-      // Call API to speak the message
-      const res = UrlFetchApp.fetch(
-        API_URL + encodeURIComponent(message),
-        {
-          // Use GET method
-          method: 'get',
-
-          // Do not stop script on HTTP error
-          muteHttpExceptions: true,
-        }
-      );
-      Logger.log(`Response (${res.getResponseCode()}): ${res.getContentText()} : ${message}`);
-    });
+/**
+ * Calls the speaker API with the encoded message
+ * @param {string} message
+ * @returns {GoogleAppsScript.URL_Fetch.HTTPResponse}
+ */
+export function callSpeakerApi(message) {
+  return UrlFetchApp.fetch(
+    API_URL + encodeURIComponent(message),
+    {
+      method: 'get',
+      muteHttpExceptions: true,
+    }
+  );
 }
