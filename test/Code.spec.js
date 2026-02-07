@@ -255,7 +255,7 @@ describe('Code.js', () => {
       });
     });
 
-    it('should clean spaces and preserve other columns', () => {
+    it('should clean spaces, call callGroq, log rephrased text and preserve other columns', () => {
       const date = new Date();
       mockGetValues.mockReturnValue([
         [date, '  hello  ', 'extra1'],
@@ -264,10 +264,16 @@ describe('Code.js', () => {
         [date, '   ', 'only spaces'],
       ]);
 
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({
+          choices: [{ message: { content: 'rephrased result' } }]
+        })
+      });
+
       Code.refreshMessageText();
 
-      expect(mockLog).toHaveBeenCalledWith('hello');
-      expect(mockLog).toHaveBeenCalledWith('全角');
+      expect(mockLog).toHaveBeenCalledWith('rephrased result');
+      expect(mockLog).toHaveBeenCalledTimes(2);
 
       expect(mockSetValues).toHaveBeenCalledWith([
         [date, 'hello', 'extra1'],
