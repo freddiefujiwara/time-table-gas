@@ -1,10 +1,10 @@
 // Base URL for Google Home speaker API
-const API_URL = 'http://a.ze.gs/google-home-speaker-wrapper/-h/192.168.1.22/-v/60/-s/';
+export const API_URL = 'http://a.ze.gs/google-home-speaker-wrapper/-h/192.168.1.22/-v/60/-s/';
 
 // Allow time difference (35 seconds)
-const THRESHOLD = 35 * 1000;
+export const THRESHOLD = 35 * 1000;
 
-function myFunction() {
+export function myFunction() {
 
   // Get current time
   const now = new Date();
