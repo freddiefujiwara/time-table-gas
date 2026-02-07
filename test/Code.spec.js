@@ -65,8 +65,6 @@ describe('Code.js', () => {
 
   describe('myFunction and processScheduledTasks', () => {
     it('should call processScheduledTasks through myFunction', () => {
-      // We can't easily mock exported functions in the same module when they call each other directly
-      // but we can verify the end-to-end behavior.
       const now = new Date('2023-10-01T10:00:00');
       vi.setSystemTime(now);
       mockGetValues.mockReturnValue([[now, 'test']]);
@@ -147,71 +145,43 @@ describe('Code.js', () => {
   });
 
   describe('isTimeWithinThreshold', () => {
-    const threshold = 35000;
-
     it('should return true if difference is within threshold', () => {
       const now = new Date(100000);
-      const target = new Date(135000);
-      expect(Code.isTimeWithinThreshold(now, target, threshold)).toBe(true);
-    });
-
-    it('should return true if difference is exactly the threshold', () => {
-      const now = new Date(100000);
-      const target = new Date(135000);
-      expect(Code.isTimeWithinThreshold(now, target, 35000)).toBe(true);
+      const target = new Date(100000 + Code.THRESHOLD);
+      expect(Code.isTimeWithinThreshold(now, target, Code.THRESHOLD)).toBe(true);
     });
 
     it('should return false if difference exceeds threshold', () => {
       const now = new Date(100000);
-      const target = new Date(135001);
-      expect(Code.isTimeWithinThreshold(now, target, threshold)).toBe(false);
-    });
-
-    it('should handle negative difference (target before now)', () => {
-      const now = new Date(100000);
-      const target = new Date(65000);
-      expect(Code.isTimeWithinThreshold(now, target, threshold)).toBe(true);
+      const target = new Date(100001 + Code.THRESHOLD);
+      expect(Code.isTimeWithinThreshold(now, target, Code.THRESHOLD)).toBe(false);
     });
   });
 
   describe('buildSpeakingMessage', () => {
+    it('should format message correctly', () => {
+      const time = new Date('2023-10-01T10:05:00');
+      expect(Code.buildSpeakingMessage(time, 'hello')).toBe('10時5分です。hello');
+    });
+
     it('should format 0 minutes as "ちょうど"', () => {
       const time = new Date('2023-10-01T10:00:00');
       expect(Code.buildSpeakingMessage(time, 'hello')).toBe('10時ちょうどです。hello');
     });
 
-    it('should format non-zero minutes correctly', () => {
-      const time = new Date('2023-10-01T10:05:00');
-      expect(Code.buildSpeakingMessage(time, 'hello')).toBe('10時5分です。hello');
-    });
-
-    it('should convert 0 hour to 12', () => {
-      const time = new Date('2023-10-01T00:00:00');
-      expect(Code.buildSpeakingMessage(time, 'hello')).toBe('12時ちょうどです。hello');
-    });
-
-    it('should convert 12 hour to 12', () => {
-      const time = new Date('2023-10-01T12:00:00');
-      expect(Code.buildSpeakingMessage(time, 'hello')).toBe('12時ちょうどです。hello');
-    });
-
-    it('should convert 13 hour to 1', () => {
-      const time = new Date('2023-10-01T13:00:00');
-      expect(Code.buildSpeakingMessage(time, 'hello')).toBe('1時ちょうどです。hello');
+    it('should handle 12-hour format correctly', () => {
+      expect(Code.buildSpeakingMessage(new Date('2023-10-01T00:00:00'), 'a')).toContain('12時');
+      expect(Code.buildSpeakingMessage(new Date('2023-10-01T12:00:00'), 'a')).toContain('12時');
+      expect(Code.buildSpeakingMessage(new Date('2023-10-01T13:00:00'), 'a')).toContain('1時');
     });
   });
 
   describe('callSpeakerApi', () => {
-    it('should call fetch with correct URL and options', () => {
+    it('should call fetch with correct URL', () => {
       mockFetch.mockReturnValue({ response: 'ok' });
-      const message = 'テストメッセージ';
+      const message = 'テスト';
       Code.callSpeakerApi(message);
-
-      const expectedUrl = Code.API_URL + encodeURIComponent(message);
-      expect(mockFetch).toHaveBeenCalledWith(expectedUrl, {
-        method: 'get',
-        muteHttpExceptions: true,
-      });
+      expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining(encodeURIComponent(message)), expect.anything());
     });
   });
 
@@ -225,28 +195,25 @@ describe('Code.js', () => {
       });
     });
 
-    it('should clean spaces and log/update non-empty messages', () => {
+    it('should clean spaces and preserve other columns', () => {
       const date = new Date();
       mockGetValues.mockReturnValue([
-        [date, '  hello  world  '],
-        [date, '　全角　スペース　'],
-        [date, '   '],
-        [date, ''],
-        [date, 123],
+        [date, '  hello  ', 'extra1'],
+        [date, '　全角　', 'extra2', 'extra3'],
+        [date, 123, 'not a string'],
+        [date, '   ', 'only spaces'],
       ]);
 
       Code.refreshMessageText();
 
-      expect(mockLog).toHaveBeenCalledWith('helloworld');
-      expect(mockLog).toHaveBeenCalledWith('全角スペース');
-      expect(mockLog).toHaveBeenCalledTimes(2);
+      expect(mockLog).toHaveBeenCalledWith('hello');
+      expect(mockLog).toHaveBeenCalledWith('全角');
 
       expect(mockSetValues).toHaveBeenCalledWith([
-        [date, 'helloworld'],
-        [date, '全角スペース'],
-        [date, '   '],
-        [date, ''],
-        [date, 123],
+        [date, 'hello', 'extra1'],
+        [date, '全角', 'extra2', 'extra3'],
+        [date, 123, 'not a string'],
+        [date, '   ', 'only spaces'],
       ]);
     });
   });

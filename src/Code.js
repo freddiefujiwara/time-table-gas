@@ -6,7 +6,7 @@ export const API_URL = 'http://a.ze.gs/google-home-speaker-wrapper/-h/192.168.1.
 /**
  * Allow time difference (35 seconds)
  */
-export const THRESHOLD_MS = 35 * 1000;
+export const THRESHOLD = 35 * 1000;
 
 /**
  * Main entry point for the script
@@ -41,13 +41,14 @@ export function processScheduledTasks() {
   const sheet = SpreadsheetApp.getActiveSheet();
   const rows = sheet.getDataRange().getValues();
 
-  rows.forEach(([scheduledTime, messageText]) => {
+  rows.forEach((row, index) => {
+    const [scheduledTime, messageText] = row;
     if (!isValidTask(scheduledTime, messageText)) {
       return;
     }
 
     const targetTime = getTargetTimeToday(now, scheduledTime);
-    if (!isTimeWithinThreshold(now, targetTime, THRESHOLD_MS)) {
+    if (!isTimeWithinThreshold(now, targetTime, THRESHOLD)) {
       return;
     }
 
@@ -133,13 +134,14 @@ export function refreshMessageText() {
   const values = range.getValues();
 
   const updatedValues = values.map(row => {
-    const [scheduledTime, messageText] = row;
+    // Preserve all columns in the row
+    const [scheduledTime, messageText, ...rest] = row;
     if (typeof messageText !== 'string') return row;
 
     const cleaned = messageText.replace(/[\s\u3000]/g, '');
     if (cleaned !== '') {
       Logger.log(cleaned);
-      return [scheduledTime, cleaned];
+      return [scheduledTime, cleaned, ...rest];
     }
     return row;
   });
