@@ -16,6 +16,24 @@ export function myFunction() {
 }
 
 /**
+ * Handles GET requests and returns scheduled tasks as JSON
+ */
+export function doGet() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const rows = sheet.getDataRange().getValues();
+
+  const tasks = rows
+    .filter(([scheduledTime, messageText]) => isValidTask(scheduledTime, messageText))
+    .map(([scheduledTime, messageText]) => ({
+      scheduledTime: scheduledTime.toISOString(),
+      messageText
+    }));
+
+  return ContentService.createTextOutput(JSON.stringify(tasks))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
  * Reads the spreadsheet and processes tasks that should be spoken
  */
 export function processScheduledTasks() {

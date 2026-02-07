@@ -7,6 +7,8 @@ describe('Code.js', () => {
   const mockGetValues = vi.fn();
   const mockFetch = vi.fn();
   const mockLog = vi.fn();
+  const mockCreateTextOutput = vi.fn();
+  const mockSetMimeType = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -28,6 +30,36 @@ describe('Code.js', () => {
 
     vi.stubGlobal('Logger', {
       log: mockLog,
+    });
+
+    vi.stubGlobal('ContentService', {
+      createTextOutput: mockCreateTextOutput,
+      MimeType: {
+        JSON: 'application/json',
+      },
+    });
+    mockCreateTextOutput.mockReturnValue({
+      setMimeType: mockSetMimeType,
+    });
+  });
+
+  describe('doGet', () => {
+    it('should return JSON representation of valid tasks', () => {
+      const date1 = new Date('2023-10-01T10:00:00Z');
+      const date2 = new Date('2023-10-01T12:00:00Z');
+      mockGetValues.mockReturnValue([
+        [date1, 'Task 1'],
+        [date2, 'Task 2'],
+        ['invalid', 'skip me'],
+      ]);
+
+      Code.doGet();
+
+      expect(mockCreateTextOutput).toHaveBeenCalledWith(JSON.stringify([
+        { scheduledTime: date1.toISOString(), messageText: 'Task 1' },
+        { scheduledTime: date2.toISOString(), messageText: 'Task 2' },
+      ]));
+      expect(mockSetMimeType).toHaveBeenCalledWith('application/json');
     });
   });
 
