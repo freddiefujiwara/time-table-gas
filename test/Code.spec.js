@@ -315,6 +315,40 @@ describe('Code.js', () => {
     });
   });
 
+  describe('listGroqModels', () => {
+    it('should fetch models list and log response content', () => {
+      mockGetProperty.mockReturnValue('test-api-key');
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({ data: [{ id: 'llama-3.1-8b-instant' }] })
+      });
+
+      const result = Code.listGroqModels();
+
+      expect(result).toBe('{"data":[{"id":"llama-3.1-8b-instant"}]}');
+      expect(mockLog).toHaveBeenCalledWith('Available Models: {"data":[{"id":"llama-3.1-8b-instant"}]}');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.groq.com/openai/v1/models',
+        {
+          method: 'get',
+          headers: { Authorization: 'Bearer test-api-key' },
+          muteHttpExceptions: true
+        }
+      );
+    });
+
+    it('should handle and log fetch errors gracefully', () => {
+      mockGetProperty.mockReturnValue('test-api-key');
+      mockFetch.mockImplementation(() => {
+        throw new Error('Network error');
+      });
+
+      const result = Code.listGroqModels();
+
+      expect(result).toBe('Error: Error: Network error');
+      expect(mockLog).toHaveBeenCalledWith('Error: Error: Network error');
+    });
+  });
+
   describe('refreshMessageText', () => {
     const mockSetValues = vi.fn();
 

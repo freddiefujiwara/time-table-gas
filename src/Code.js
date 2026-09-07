@@ -187,3 +187,29 @@ export function callGroq(prompt) {
     return "Error: " + e.toString();
   }
 }
+
+/**
+ * Utility function to list available Groq models for debugging
+ */
+export function listGroqModels() {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const apiKey = scriptProperties.getProperty('GROQ_API_KEY');
+  const apiUrl = "https://api.groq.com/openai/v1/models";
+
+  const options = {
+    "method": "get",
+    "headers": { "Authorization": "Bearer " + apiKey },
+    "muteHttpExceptions": true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(apiUrl, options);
+    const content = response.getContentText();
+    Logger.log("Available Models: " + content);
+    return content;
+  } catch (e) {
+    const errorMsg = "Error: " + e.toString();
+    Logger.log(errorMsg);
+    return errorMsg;
+  }
+}
