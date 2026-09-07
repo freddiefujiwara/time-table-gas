@@ -196,7 +196,11 @@ describe('Code.js', () => {
 
   describe('callGroq', () => {
     it('should return content from Groq API on success', () => {
-      mockGetProperty.mockReturnValue('test-api-key');
+      mockGetProperty.mockImplementation(key => {
+        if (key === 'GROQ_API_KEY') return 'test-api-key';
+        if (key === 'GROQ_MODEL') return null;
+        return null;
+      });
       const mockResponse = {
         choices: [{ message: { content: 'Groq response' } }]
       };
@@ -208,6 +212,7 @@ describe('Code.js', () => {
 
       expect(result).toBe('Groq response');
       expect(mockGetProperty).toHaveBeenCalledWith('GROQ_API_KEY');
+      expect(mockGetProperty).toHaveBeenCalledWith('GROQ_MODEL');
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.groq.com/openai/v1/chat/completions',
         expect.objectContaining({
@@ -215,6 +220,34 @@ describe('Code.js', () => {
           headers: { Authorization: 'Bearer test-api-key' },
           payload: JSON.stringify({
             model: 'llama-3.3-70b-versatile',
+            messages: [{ role: 'user', content: 'test prompt' }],
+            temperature: 0.7
+          })
+        })
+      );
+    });
+
+    it('should use custom GROQ_MODEL property if set', () => {
+      mockGetProperty.mockImplementation(key => {
+        if (key === 'GROQ_API_KEY') return 'test-api-key';
+        if (key === 'GROQ_MODEL') return 'llama-3.1-8b-instant';
+        return null;
+      });
+      const mockResponse = {
+        choices: [{ message: { content: 'Groq custom model response' } }]
+      };
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify(mockResponse)
+      });
+
+      const result = Code.callGroq('test prompt');
+
+      expect(result).toBe('Groq custom model response');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.groq.com/openai/v1/chat/completions',
+        expect.objectContaining({
+          payload: JSON.stringify({
+            model: 'llama-3.1-8b-instant',
             messages: [{ role: 'user', content: 'test prompt' }],
             temperature: 0.7
           })

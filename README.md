@@ -42,6 +42,7 @@ A Google Apps Script (GAS) project that processes scheduled tasks from a spreads
 2. Set the `GROQ_API_KEY` in your Script Properties:
    - Go to Project Settings in the GAS Editor.
    - Add a property named `GROQ_API_KEY` with your Groq API key.
+   - (Optional) Add a property named `GROQ_MODEL` to specify a model (defaults to `llama-3.3-70b-versatile`).
 
 ## Development
 
