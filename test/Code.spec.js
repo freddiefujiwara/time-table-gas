@@ -243,6 +243,43 @@ describe('Code.js', () => {
 
       expect(result).toContain('Error: SyntaxError');
     });
+
+    it('should return API error message when Groq API returns an error payload', () => {
+      mockGetProperty.mockReturnValue('test-api-key');
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({
+          error: { message: 'Invalid API key or rate limit exceeded' }
+        })
+      });
+
+      const result = Code.callGroq('test prompt');
+
+      expect(result).toBe('Error: Invalid API key or rate limit exceeded');
+    });
+
+    it('should return stringified error object if error message is missing', () => {
+      mockGetProperty.mockReturnValue('test-api-key');
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({
+          error: { code: 500 }
+        })
+      });
+
+      const result = Code.callGroq('test prompt');
+
+      expect(result).toBe('Error: {"code":500}');
+    });
+
+    it('should return error message when response format is missing choices', () => {
+      mockGetProperty.mockReturnValue('test-api-key');
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({})
+      });
+
+      const result = Code.callGroq('test prompt');
+
+      expect(result).toBe('Error: Invalid response format from Groq API');
+    });
   });
 
   describe('refreshMessageText', () => {

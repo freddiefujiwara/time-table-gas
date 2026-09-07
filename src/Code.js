@@ -174,7 +174,13 @@ export function callGroq(prompt) {
   try {
     const response = UrlFetchApp.fetch(apiUrl, options);
     const json = JSON.parse(response.getContentText());
-    return json.choices[0].message.content;
+    if (json && json.error) {
+      return "Error: " + (json.error.message || JSON.stringify(json.error));
+    }
+    if (json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content !== undefined) {
+      return json.choices[0].message.content;
+    }
+    return "Error: Invalid response format from Groq API";
   } catch (e) {
     return "Error: " + e.toString();
   }
