@@ -156,7 +156,7 @@ export function refreshMessageText() {
 export function callGroq(prompt) {
   const scriptProperties = PropertiesService.getScriptProperties();
   const apiKey = scriptProperties.getProperty('GROQ_API_KEY');
-  const model = scriptProperties.getProperty('GROQ_MODEL') || "llama-3.3-70b-versatile";
+  const model = scriptProperties.getProperty('GROQ_MODEL') || "llama-3.1-8b-instant";
   const apiUrl = "https://api.groq.com/openai/v1/chat/completions";
 
   const payload = {

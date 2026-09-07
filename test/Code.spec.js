@@ -219,7 +219,7 @@ describe('Code.js', () => {
           method: 'post',
           headers: { Authorization: 'Bearer test-api-key' },
           payload: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
+            model: 'llama-3.1-8b-instant',
             messages: [{ role: 'user', content: 'test prompt' }],
             temperature: 0.7
           })

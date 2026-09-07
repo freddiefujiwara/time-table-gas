@@ -6,7 +6,7 @@ A Google Apps Script (GAS) project that processes scheduled tasks from a spreads
 
 - **Scheduled Speaker Notifications**: Periodically checks a spreadsheet for tasks scheduled within a specific threshold (35 seconds) and sends them to a speaker API.
 - **Web App API (`doGet`)**: Serves the list of scheduled tasks as a JSON response.
-- **AI Rephrasing (`refreshMessageText`)**: Sanitizes message text by removing spaces and rephrases them using Groq (llama-3.3-70b-versatile) to keep the notifications fresh.
+- **AI Rephrasing (`refreshMessageText`)**: Sanitizes message text by removing spaces and rephrases them using Groq (llama-3.1-8b-instant) to keep the notifications fresh.
 - **100% Test Coverage**: High-quality code covered by a comprehensive Vitest suite.
 
 ## Project Structure
@@ -42,7 +42,7 @@ A Google Apps Script (GAS) project that processes scheduled tasks from a spreads
 2. Set the `GROQ_API_KEY` in your Script Properties:
    - Go to Project Settings in the GAS Editor.
    - Add a property named `GROQ_API_KEY` with your Groq API key.
-   - (Optional) Add a property named `GROQ_MODEL` to specify a model (defaults to `llama-3.3-70b-versatile`).
+   - (Optional) Add a property named `GROQ_MODEL` to specify a model (defaults to `llama-3.1-8b-instant`).
 
 ## Development
 
