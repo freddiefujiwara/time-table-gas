@@ -195,14 +195,14 @@ describe('Code.js', () => {
   });
 
   describe('callGroq', () => {
-    it('should return content from Groq API on success', () => {
+    it('should return content from Groq API on success and strip think tags', () => {
       mockGetProperty.mockImplementation(key => {
         if (key === 'GROQ_API_KEY') return 'test-api-key';
         if (key === 'GROQ_MODEL') return null;
         return null;
       });
       const mockResponse = {
-        choices: [{ message: { content: 'Groq response' } }]
+        choices: [{ message: { content: '<think>\nReasoning process here...\n</think>\nGroq response' } }]
       };
       mockFetch.mockReturnValue({
         getContentText: () => JSON.stringify(mockResponse)
@@ -385,6 +385,25 @@ describe('Code.js', () => {
         [date, 'rephrased result', 'extra2', 'extra3'],
         [date, 123, 'not a string'],
         [date, '   ', 'only spaces'],
+      ]);
+    });
+
+    it('should not update row if callGroq returns an error message starting with Error:', () => {
+      const date = new Date();
+      mockGetValues.mockReturnValue([
+        [date, '  hello  ', 'extra1'],
+      ]);
+
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({
+          error: { message: 'The model llama-3.1-8b-instant does not exist' }
+        })
+      });
+
+      Code.refreshMessageText();
+
+      expect(mockSetValues).toHaveBeenCalledWith([
+        [date, '  hello  ', 'extra1'],
       ]);
     });
   });

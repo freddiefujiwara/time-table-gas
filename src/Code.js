@@ -142,6 +142,9 @@ export function refreshMessageText() {
     if (cleaned !== '') {
       const rephrased = callGroq(`${cleaned}」を似たニュアンスで言い換えた文言のみ返せ。解説不要。`);
       Logger.log(`${cleaned} -> ${rephrased}`);
+      if (typeof rephrased === 'string' && rephrased.startsWith("Error:")) {
+        return row;
+      }
       return [scheduledTime, rephrased, ...rest];
     }
     return row;
@@ -180,7 +183,8 @@ export function callGroq(prompt) {
       return "Error: " + (json.error.message || JSON.stringify(json.error));
     }
     if (json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content !== undefined) {
-      return json.choices[0].message.content;
+      const content = json.choices[0].message.content;
+      return content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
     }
     return "Error: Invalid response format from Groq API";
   } catch (e) {
