@@ -195,10 +195,14 @@ describe('Code.js', () => {
   });
 
   describe('callGroq', () => {
-    it('should return content from Groq API on success', () => {
-      mockGetProperty.mockReturnValue('test-api-key');
+    it('should return content from Groq API on success and strip think tags', () => {
+      mockGetProperty.mockImplementation(key => {
+        if (key === 'GROQ_API_KEY') return 'test-api-key';
+        if (key === 'GROQ_MODEL') return null;
+        return null;
+      });
       const mockResponse = {
-        choices: [{ message: { content: 'Groq response' } }]
+        choices: [{ message: { content: '<think>\nReasoning process here...\n</think>\nGroq response' } }]
       };
       mockFetch.mockReturnValue({
         getContentText: () => JSON.stringify(mockResponse)
@@ -208,13 +212,42 @@ describe('Code.js', () => {
 
       expect(result).toBe('Groq response');
       expect(mockGetProperty).toHaveBeenCalledWith('GROQ_API_KEY');
+      expect(mockGetProperty).toHaveBeenCalledWith('GROQ_MODEL');
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.groq.com/openai/v1/chat/completions',
         expect.objectContaining({
           method: 'post',
           headers: { Authorization: 'Bearer test-api-key' },
           payload: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
+            model: 'llama-3.1-8b-instant',
+            messages: [{ role: 'user', content: 'test prompt' }],
+            temperature: 0.7
+          })
+        })
+      );
+    });
+
+    it('should use custom GROQ_MODEL property if set', () => {
+      mockGetProperty.mockImplementation(key => {
+        if (key === 'GROQ_API_KEY') return 'test-api-key';
+        if (key === 'GROQ_MODEL') return 'llama-3.1-8b-instant';
+        return null;
+      });
+      const mockResponse = {
+        choices: [{ message: { content: 'Groq custom model response' } }]
+      };
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify(mockResponse)
+      });
+
+      const result = Code.callGroq('test prompt');
+
+      expect(result).toBe('Groq custom model response');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.groq.com/openai/v1/chat/completions',
+        expect.objectContaining({
+          payload: JSON.stringify({
+            model: 'llama-3.1-8b-instant',
             messages: [{ role: 'user', content: 'test prompt' }],
             temperature: 0.7
           })
@@ -242,6 +275,77 @@ describe('Code.js', () => {
       const result = Code.callGroq('test prompt');
 
       expect(result).toContain('Error: SyntaxError');
+    });
+
+    it('should return API error message when Groq API returns an error payload', () => {
+      mockGetProperty.mockReturnValue('test-api-key');
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({
+          error: { message: 'Invalid API key or rate limit exceeded' }
+        })
+      });
+
+      const result = Code.callGroq('test prompt');
+
+      expect(result).toBe('Error: Invalid API key or rate limit exceeded');
+    });
+
+    it('should return stringified error object if error message is missing', () => {
+      mockGetProperty.mockReturnValue('test-api-key');
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({
+          error: { code: 500 }
+        })
+      });
+
+      const result = Code.callGroq('test prompt');
+
+      expect(result).toBe('Error: {"code":500}');
+    });
+
+    it('should return error message when response format is missing choices', () => {
+      mockGetProperty.mockReturnValue('test-api-key');
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({})
+      });
+
+      const result = Code.callGroq('test prompt');
+
+      expect(result).toBe('Error: Invalid response format from Groq API');
+    });
+  });
+
+  describe('listGroqModels', () => {
+    it('should fetch models list and log response content', () => {
+      mockGetProperty.mockReturnValue('test-api-key');
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({ data: [{ id: 'llama-3.1-8b-instant' }] })
+      });
+
+      const result = Code.listGroqModels();
+
+      expect(result).toBe('{"data":[{"id":"llama-3.1-8b-instant"}]}');
+      expect(mockLog).toHaveBeenCalledWith('Available Models: {"data":[{"id":"llama-3.1-8b-instant"}]}');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.groq.com/openai/v1/models',
+        {
+          method: 'get',
+          headers: { Authorization: 'Bearer test-api-key' },
+          muteHttpExceptions: true
+        }
+      );
+    });
+
+    it('should handle and log fetch errors gracefully', () => {
+      mockGetProperty.mockReturnValue('test-api-key');
+      mockFetch.mockImplementation(() => {
+        throw new Error('Network error');
+      });
+
+      const result = Code.listGroqModels();
+
+      expect(result).toBe('Error: Error: Network error');
+      expect(mockLog).toHaveBeenCalledWith('Error: Error: Network error');
     });
   });
 
@@ -281,6 +385,25 @@ describe('Code.js', () => {
         [date, 'rephrased result', 'extra2', 'extra3'],
         [date, 123, 'not a string'],
         [date, '   ', 'only spaces'],
+      ]);
+    });
+
+    it('should not update row if callGroq returns an error message starting with Error:', () => {
+      const date = new Date();
+      mockGetValues.mockReturnValue([
+        [date, '  hello  ', 'extra1'],
+      ]);
+
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({
+          error: { message: 'The model llama-3.1-8b-instant does not exist' }
+        })
+      });
+
+      Code.refreshMessageText();
+
+      expect(mockSetValues).toHaveBeenCalledWith([
+        [date, '  hello  ', 'extra1'],
       ]);
     });
   });

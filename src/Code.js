@@ -142,6 +142,9 @@ export function refreshMessageText() {
     if (cleaned !== '') {
       const rephrased = callGroq(`${cleaned}」を似たニュアンスで言い換えた文言のみ返せ。解説不要。`);
       Logger.log(`${cleaned} -> ${rephrased}`);
+      if (typeof rephrased === 'string' && rephrased.startsWith("Error:")) {
+        return row;
+      }
       return [scheduledTime, rephrased, ...rest];
     }
     return row;
@@ -154,11 +157,13 @@ export function refreshMessageText() {
  * Groq API call
  */
 export function callGroq(prompt) {
-  const apiKey = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const apiKey = scriptProperties.getProperty('GROQ_API_KEY');
+  const model = scriptProperties.getProperty('GROQ_MODEL') || "llama-3.1-8b-instant";
   const apiUrl = "https://api.groq.com/openai/v1/chat/completions";
 
   const payload = {
-    "model": "llama-3.3-70b-versatile",
+    "model": model,
     "messages": [{"role": "user", "content": prompt}],
     "temperature": 0.7
   };
@@ -174,8 +179,41 @@ export function callGroq(prompt) {
   try {
     const response = UrlFetchApp.fetch(apiUrl, options);
     const json = JSON.parse(response.getContentText());
-    return json.choices[0].message.content;
+    if (json && json.error) {
+      return "Error: " + (json.error.message || JSON.stringify(json.error));
+    }
+    if (json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content !== undefined) {
+      const content = json.choices[0].message.content;
+      return content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    }
+    return "Error: Invalid response format from Groq API";
   } catch (e) {
     return "Error: " + e.toString();
+  }
+}
+
+/**
+ * Utility function to list available Groq models for debugging
+ */
+export function listGroqModels() {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const apiKey = scriptProperties.getProperty('GROQ_API_KEY');
+  const apiUrl = "https://api.groq.com/openai/v1/models";
+
+  const options = {
+    "method": "get",
+    "headers": { "Authorization": "Bearer " + apiKey },
+    "muteHttpExceptions": true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(apiUrl, options);
+    const content = response.getContentText();
+    Logger.log("Available Models: " + content);
+    return content;
+  } catch (e) {
+    const errorMsg = "Error: " + e.toString();
+    Logger.log(errorMsg);
+    return errorMsg;
   }
 }
