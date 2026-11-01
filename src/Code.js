@@ -1,7 +1,15 @@
 /**
- * Base URL for Google Home speaker API
+ * Speaker API URL prefix. The real value (which contains a home
+ * server host and a LAN address) lives in the script property
+ * SPEAKER_API_URL, not in this public source code.
  */
-export const API_URL = 'http://a.ze.gs/google-home-speaker-wrapper/-h/192.168.1.22/-v/60/-s/';
+export const getSpeakerApiUrl = () => {
+  const url = PropertiesService.getScriptProperties().getProperty('SPEAKER_API_URL');
+  if (!url) {
+    throw new Error('script property SPEAKER_API_URL is not set');
+  }
+  return url;
+};
 
 /**
  * Allow time difference (35 seconds)
@@ -117,7 +125,7 @@ export function buildSpeakingMessage(time, text) {
  */
 export function callSpeakerApi(message) {
   return UrlFetchApp.fetch(
-    API_URL + encodeURIComponent(message),
+    getSpeakerApiUrl() + encodeURIComponent(message),
     {
       method: 'get',
       muteHttpExceptions: true,

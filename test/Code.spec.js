@@ -47,6 +47,9 @@ describe('Code.js', () => {
     mockGetScriptProperties.mockReturnValue({
       getProperty: mockGetProperty,
     });
+    mockGetProperty.mockImplementation(key =>
+      key === 'SPEAKER_API_URL' ? 'http://home-api.example/speak/-s/' : null
+    );
     mockCreateTextOutput.mockReturnValue({
       setMimeType: mockSetMimeType,
     });
@@ -187,6 +190,9 @@ describe('Code.js', () => {
 
   describe('callSpeakerApi', () => {
     it('should call fetch with correct URL', () => {
+      mockGetProperty.mockImplementation(key =>
+        key === 'SPEAKER_API_URL' ? 'http://home-api.example/speak/-s/' : null
+      );
       mockFetch.mockReturnValue({ response: 'ok' });
       const message = 'テスト';
       Code.callSpeakerApi(message);
