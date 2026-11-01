@@ -74,3 +74,12 @@ The Web App API is documented in `openapi.yaml`. When deployed as a web app, the
 ## License
 
 This project is licensed under the MIT License.
+
+## Script properties
+
+These values live in the Apps Script project's script properties,
+not in this repository:
+
+- `SPEAKER_API_URL`: URL prefix of the speaker API (contains a home
+  server host and a LAN address).
+- `GROQ_API_KEY`, `GROQ_MODEL`: for the Groq rephrasing feature.
