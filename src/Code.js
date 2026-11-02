@@ -201,6 +201,194 @@ export function callGroq(prompt) {
 }
 
 /**
+ * --- Sync to the alarm app ---
+ * The sheet stays the single editing surface and stays private to
+ * this script: the alarm project never reads it. Instead, this
+ * script mirrors every announcement row into a recurring rule in
+ * the alarm app (via its sync-token API), and the alarm trigger
+ * does the firing. The mapping from sheet time to alarm rule id is
+ * kept in the ALARM_SYNC_MAP script property, so the sheet itself
+ * is never written to by the sync.
+ *
+ * Required script properties:
+ *   ALARM_EXEC_URL    the alarm web app /exec URL
+ *   ALARM_SYNC_TOKEN  the same value as the alarm project's
+ *                     SYNC_TOKEN property
+ * Setup: run setupTimetableSync() once (installs an on-edit
+ * trigger and an hourly trigger, then syncs immediately). After
+ * verifying the rules in the alarm app, run stopTimetableFiring()
+ * to retire this script's own firing trigger.
+ */
+
+/**
+ * Builds the wire-form speech command the alarm app stores, from
+ * this script's speaker API URL prefix and the spoken message:
+ * "http://host/google-home-speaker-wrapper/-h/…/-v/60/-s/" plus a
+ * message becomes "google-home-speaker-wrapper -h … -v 60 -s <…>".
+ */
+export function buildSyncSpeechCommand(apiUrl, message) {
+  const path = String(apiUrl || '').replace(/^https?:\/\/[^/]+/i, '');
+  const segments = path.split('/').filter((segment) => segment.length > 0);
+  return `${segments.join(' ')} ${encodeURIComponent(message)}`;
+}
+
+/**
+ * The desired alarm rules for the sheet rows, as a map of "HH:MM"
+ * to { command }. Rows without a valid time or text are skipped,
+ * a whitespace-only text means the time signal only, and when a
+ * time appears twice the last row wins (the grid has unique times).
+ */
+export function desiredSyncRules(rows, apiUrl) {
+  const desired = new Map();
+  (rows || []).forEach(([scheduledTime, messageText]) => {
+    if (!isValidTask(scheduledTime, messageText)) {
+      return;
+    }
+    const hour = String(scheduledTime.getHours()).padStart(2, '0');
+    const minute = String(scheduledTime.getMinutes()).padStart(2, '0');
+    const text = String(messageText).trim() === '' ? '' : messageText;
+    const message = buildSpeakingMessage(scheduledTime, text);
+    desired.set(`${hour}:${minute}`, {
+      command: buildSyncSpeechCommand(apiUrl, message),
+    });
+  });
+  return Object.fromEntries(desired);
+}
+
+/**
+ * Diffs the desired rules against the stored map and the rules the
+ * alarm app currently holds. A stored rule is kept only when it
+ * still exists in the alarm app and its command is unchanged;
+ * anything else is deleted and (when still desired) recreated.
+ */
+export function planSync(desired, stored, currentRules) {
+  const currentIds = new Set((currentRules || []).map((rule) => rule.id));
+  const toDelete = [];
+  const toCreate = [];
+  const kept = {};
+  Object.entries(desired || {}).forEach(([time, entry]) => {
+    const prev = (stored || {})[time];
+    if (prev && currentIds.has(prev.id) && prev.command === entry.command) {
+      kept[time] = prev;
+      return;
+    }
+    if (prev && currentIds.has(prev.id)) {
+      toDelete.push(prev.id);
+    }
+    toCreate.push({ time, command: entry.command });
+  });
+  Object.entries(stored || {}).forEach(([time, prev]) => {
+    if (!desired || !(time in desired)) {
+      if (currentIds.has(prev.id)) {
+        toDelete.push(prev.id);
+      }
+    }
+  });
+  return { toDelete, toCreate, kept };
+}
+
+/**
+ * Calls the alarm web app with the sync token. UrlFetchApp follows
+ * the web app redirect, so the JSON answer comes back directly.
+ */
+export function callAlarmApi(body) {
+  const properties = PropertiesService.getScriptProperties();
+  const url = properties.getProperty('ALARM_EXEC_URL');
+  const token = properties.getProperty('ALARM_SYNC_TOKEN');
+  if (!url || !token) {
+    throw new Error('script properties ALARM_EXEC_URL / ALARM_SYNC_TOKEN are not set');
+  }
+  const response = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'text/plain',
+    payload: JSON.stringify({ ...body, sync_token: token }),
+    muteHttpExceptions: true,
+  });
+  const result = JSON.parse(response.getContentText());
+  if (!result.ok) {
+    throw new Error(`alarm API ${body.action} failed: ${result.error || 'unknown error'}`);
+  }
+  return result;
+}
+
+/**
+ * Mirrors the sheet into alarm rules. Runs on sheet edits and
+ * hourly; concurrent runs are skipped (the next run reconciles).
+ */
+export function syncTimetableToAlarm() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30 * 1000)) {
+    Logger.log('timetable sync skipped: another run holds the lock');
+    return;
+  }
+  try {
+    const rows = SpreadsheetApp.getActiveSheet().getDataRange().getValues();
+    const desired = desiredSyncRules(rows, getSpeakerApiUrl());
+    const properties = PropertiesService.getScriptProperties();
+    let stored = {};
+    try {
+      stored = JSON.parse(properties.getProperty('ALARM_SYNC_MAP') || '{}') || {};
+    } catch (e) {
+      stored = {};
+    }
+    const current = callAlarmApi({ action: 'list_rules' }).rules || [];
+    const plan = planSync(desired, stored, current);
+    plan.toDelete.forEach((id) => callAlarmApi({ action: 'delete_rule', id }));
+    const nextMap = { ...plan.kept };
+    plan.toCreate.forEach((item) => {
+      const created = callAlarmApi({
+        action: 'set_rule',
+        time: item.time,
+        commands: [item.command],
+      });
+      nextMap[item.time] = { id: created.rule.id, command: item.command };
+    });
+    properties.setProperty('ALARM_SYNC_MAP', JSON.stringify(nextMap));
+    Logger.log(
+      `timetable sync: kept ${Object.keys(plan.kept).length}, ` +
+        `created ${plan.toCreate.length}, deleted ${plan.toDelete.length}`
+    );
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * One-time setup: (re)installs the sync triggers — on sheet edit
+ * and hourly — and runs the first sync. This script's own firing
+ * trigger is left untouched; retire it with stopTimetableFiring()
+ * once the alarm rules look right.
+ */
+export function setupTimetableSync() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  ScriptApp.getProjectTriggers().forEach((trigger) => {
+    if (trigger.getHandlerFunction() === 'syncTimetableToAlarm') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+  ScriptApp.newTrigger('syncTimetableToAlarm').forSpreadsheet(spreadsheet).onEdit().create();
+  ScriptApp.newTrigger('syncTimetableToAlarm').timeBased().everyHours(1).create();
+  syncTimetableToAlarm();
+}
+
+/**
+ * Cutover step: removes this script's own firing triggers so only
+ * the alarm app speaks the announcements. Returns how many were
+ * removed.
+ */
+export function stopTimetableFiring() {
+  let removed = 0;
+  ScriptApp.getProjectTriggers().forEach((trigger) => {
+    if (trigger.getHandlerFunction() === 'myFunction') {
+      ScriptApp.deleteTrigger(trigger);
+      removed += 1;
+    }
+  });
+  Logger.log(`timetable firing triggers removed: ${removed}`);
+  return removed;
+}
+
+/**
  * Utility function to list available Groq models for debugging
  */
 export function listGroqModels() {

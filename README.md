@@ -83,3 +83,24 @@ not in this repository:
 - `SPEAKER_API_URL`: URL prefix of the speaker API (contains a home
   server host and a LAN address).
 - `GROQ_API_KEY`, `GROQ_MODEL`: for the Groq rephrasing feature.
+- `ALARM_EXEC_URL`, `ALARM_SYNC_TOKEN`: for the alarm sync below.
+  The token must match the alarm project's `SYNC_TOKEN` property.
+
+## Sync to the alarm app
+
+The sheet remains the only editing surface and stays private to
+this project — the alarm project never reads it. Instead,
+`syncTimetableToAlarm()` mirrors each announcement row into a
+recurring rule in the alarm app, and the alarm trigger does the
+firing with the same "it is HH:MM. <text>" wording.
+
+- The time-to-rule-id mapping lives in the `ALARM_SYNC_MAP` script
+  property; the sync never writes to the sheet.
+- `setupTimetableSync()` installs an on-edit trigger and an hourly
+  trigger, then syncs immediately. Sheet edits therefore reach the
+  alarm app within moments, and the hourly run heals any drift
+  (for example a synced rule deleted in the alarm UI comes back).
+- Cutover: after the properties above are set and
+  `setupTimetableSync()` has run, check the rules in the alarm
+  app, then run `stopTimetableFiring()` to remove this project's
+  own firing triggers so announcements are not spoken twice.
