@@ -413,4 +413,140 @@ describe('Code.js', () => {
       ]);
     });
   });
+
+  describe('alarm sync helpers', () => {
+    it('builds a wire-form speech command from the speaker API URL', () => {
+      expect(
+        Code.buildSyncSpeechCommand(
+          'http://a.ze.gs/google-home-speaker-wrapper/-h/192.168.1.22/-v/60/-s/',
+          '7時ちょうどです。朝ごはんです'
+        )
+      ).toBe(
+        'google-home-speaker-wrapper -h 192.168.1.22 -v 60 -s ' +
+          encodeURIComponent('7時ちょうどです。朝ごはんです')
+      );
+      expect(Code.buildSyncSpeechCommand('http://home-api.example/speak/-s/', 'x')).toBe(
+        'speak -s ' + encodeURIComponent('x')
+      );
+    });
+
+    it('derives desired rules from rows, skipping invalid ones', () => {
+      const rows = [
+        [new Date(2026, 10, 2, 7, 0), '朝ごはんです'],
+        [new Date(2026, 10, 2, 7, 30), '　'],
+        ['not a date', 'skip'],
+        [new Date(2026, 10, 2, 8, 0), ''],
+      ];
+      const desired = Code.desiredSyncRules(rows, 'http://home-api.example/speak/-s/');
+      expect(Object.keys(desired).sort()).toEqual(['07:00', '07:30']);
+      expect(desired['07:00'].command).toBe(
+        'speak -s ' + encodeURIComponent('7時ちょうどです。朝ごはんです')
+      );
+      expect(desired['07:30'].command).toBe(
+        'speak -s ' + encodeURIComponent('7時30分です。')
+      );
+    });
+
+    it('plans keeps, recreations, and deletions', () => {
+      const desired = {
+        '07:00': { command: 'cmd-a' },
+        '07:30': { command: 'cmd-b2' },
+        '08:00': { command: 'cmd-c' },
+      };
+      const stored = {
+        '07:00': { id: 'r1', command: 'cmd-a' },
+        '07:30': { id: 'r2', command: 'cmd-b1' },
+        '09:00': { id: 'r3', command: 'cmd-d' },
+        '10:00': { id: 'r4', command: 'cmd-e' },
+      };
+      const current = [{ id: 'r1' }, { id: 'r2' }, { id: 'r3' }];
+      const plan = Code.planSync(desired, stored, current);
+      expect(plan.kept).toEqual({ '07:00': { id: 'r1', command: 'cmd-a' } });
+      expect(plan.toDelete.sort()).toEqual(['r2', 'r3']);
+      expect(plan.toCreate).toEqual([
+        { time: '07:30', command: 'cmd-b2' },
+        { time: '08:00', command: 'cmd-c' },
+      ]);
+    });
+  });
+
+  describe('syncTimetableToAlarm', () => {
+    const store = {};
+    let fetchBodies;
+
+    beforeEach(() => {
+      Object.keys(store).forEach((key) => delete store[key]);
+      store.ALARM_EXEC_URL = 'https://alarm.example/exec';
+      store.ALARM_SYNC_TOKEN = 'sync-token-1';
+      fetchBodies = [];
+      mockGetScriptProperties.mockReturnValue({
+        getProperty: (key) =>
+          key === 'SPEAKER_API_URL'
+            ? 'http://home-api.example/speak/-s/'
+            : store[key] ?? null,
+        setProperty: (key, value) => {
+          store[key] = value;
+        },
+      });
+      vi.stubGlobal('LockService', {
+        getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }),
+      });
+      mockFetch.mockImplementation((url, options) => {
+        const body = JSON.parse(options.payload);
+        fetchBodies.push(body);
+        let result;
+        if (body.action === 'list_rules') {
+          result = { ok: true, rules: [] };
+        } else if (body.action === 'set_rule') {
+          result = { ok: true, rule: { id: `id-${body.time}` } };
+        } else {
+          result = { ok: true, deleted: 1 };
+        }
+        return { getContentText: () => JSON.stringify(result) };
+      });
+    });
+
+    it('creates a rule per announcement row and saves the map', () => {
+      mockGetValues.mockReturnValue([
+        [new Date(2026, 10, 2, 7, 0), '朝ごはんです'],
+        [new Date(2026, 10, 2, 19, 0), '夕ごはんです'],
+      ]);
+
+      Code.syncTimetableToAlarm();
+
+      const sets = fetchBodies.filter((b) => b.action === 'set_rule');
+      expect(sets).toHaveLength(2);
+      expect(sets[0].time).toBe('07:00');
+      expect(sets[0].sync_token).toBe('sync-token-1');
+      expect(sets[0].commands[0]).toBe(
+        'speak -s ' + encodeURIComponent('7時ちょうどです。朝ごはんです')
+      );
+      const map = JSON.parse(store.ALARM_SYNC_MAP);
+      expect(Object.keys(map).sort()).toEqual(['07:00', '19:00']);
+      expect(map['07:00'].id).toBe('id-07:00');
+    });
+
+    it('deletes the rule when the text is removed from the sheet', () => {
+      store.ALARM_SYNC_MAP = JSON.stringify({
+        '07:00': { id: 'r1', command: 'speak -s old' },
+      });
+      mockGetValues.mockReturnValue([[new Date(2026, 10, 2, 7, 0), '']]);
+      mockFetch.mockImplementation((url, options) => {
+        const body = JSON.parse(options.payload);
+        fetchBodies.push(body);
+        const result =
+          body.action === 'list_rules'
+            ? { ok: true, rules: [{ id: 'r1', time: '07:00', commands: ['speak -s old'] }] }
+            : { ok: true, deleted: 1 };
+        return { getContentText: () => JSON.stringify(result) };
+      });
+
+      Code.syncTimetableToAlarm();
+
+      expect(fetchBodies.filter((b) => b.action === 'delete_rule')).toEqual([
+        expect.objectContaining({ id: 'r1' }),
+      ]);
+      expect(JSON.parse(store.ALARM_SYNC_MAP)).toEqual({});
+    });
+  });
 });
