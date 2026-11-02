@@ -1,10 +1,10 @@
 # Groq GAS Scheduled Tasks
 
-A Google Apps Script (GAS) project that processes scheduled tasks from a spreadsheet and triggers spoken notifications via an external speaker API. It also features AI-powered message rephrasing using the Groq API.
+A Google Apps Script (GAS) project that keeps a spreadsheet of scheduled spoken announcements and mirrors it into the alarm app, which does the actual firing. It also features AI-powered message rephrasing using the Groq API.
 
 ## Features
 
-- **Scheduled Speaker Notifications**: Periodically checks a spreadsheet for tasks scheduled within a specific threshold (35 seconds) and sends them to a speaker API.
+- **Alarm Sync (`syncTimetableToAlarm`)**: Mirrors each announcement row into a recurring rule in the alarm app (see "Sync to the alarm app" below). This project used to fire the announcements itself; that trigger and code were retired in November 2026.
 - **Web App API (`doGet`)**: Serves the list of scheduled tasks as a JSON response.
 - **AI Rephrasing (`refreshMessageText`)**: Sanitizes message text by removing spaces and rephrases them using Groq (llama-3.1-8b-instant) to keep the notifications fresh.
 - **100% Test Coverage**: High-quality code covered by a comprehensive Vitest suite.
@@ -100,7 +100,10 @@ firing with the same "it is HH:MM. <text>" wording.
   trigger, then syncs immediately. Sheet edits therefore reach the
   alarm app within moments, and the hourly run heals any drift
   (for example a synced rule deleted in the alarm UI comes back).
-- Cutover: after the properties above are set and
-  `setupTimetableSync()` has run, check the rules in the alarm
-  app, then run `stopTimetableFiring()` to remove this project's
-  own firing triggers so announcements are not spoken twice.
+- Cutover (completed November 2026): the properties above were
+  set, `setupTimetableSync()` ran, the mirrored rules were
+  verified in the alarm app, and this project's own firing
+  trigger was removed so announcements are not spoken twice. The
+  firing code was deleted afterwards, once the alarm path had
+  proved stable; the sync triggers (on-edit and hourly) are the
+  only time-based triggers this project needs.

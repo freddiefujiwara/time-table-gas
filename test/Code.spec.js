@@ -75,54 +75,6 @@ describe('Code.js', () => {
     });
   });
 
-  describe('myFunction and processScheduledTasks', () => {
-    it('should call processScheduledTasks through myFunction', () => {
-      const now = new Date('2023-10-01T10:00:00');
-      vi.setSystemTime(now);
-      mockGetValues.mockReturnValue([[now, 'test']]);
-      mockFetch.mockReturnValue({
-        getResponseCode: () => 200,
-        getContentText: () => 'OK',
-      });
-
-      Code.myFunction();
-
-      expect(mockFetch).toHaveBeenCalled();
-    });
-
-    it('should process multiple valid rows within threshold', () => {
-      const now = new Date('2023-10-01T10:00:00');
-      vi.setSystemTime(now);
-
-      mockGetValues.mockReturnValue([
-        [new Date('2023-10-01T10:00:00'), 'msg1'],
-        [new Date('2023-10-01T10:00:10'), 'msg2'],
-      ]);
-      mockFetch.mockReturnValue({
-        getResponseCode: () => 200,
-        getContentText: () => 'OK',
-      });
-
-      Code.processScheduledTasks();
-
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-      expect(mockLog).toHaveBeenCalledTimes(2);
-    });
-
-    it('should skip invalid or out-of-threshold tasks', () => {
-      const now = new Date('2023-10-01T10:00:00');
-      vi.setSystemTime(now);
-
-      mockGetValues.mockReturnValue([
-        ['not a date', 'msg1'], // invalid task
-        [new Date('2023-10-01T10:01:00'), 'msg2'], // out of threshold
-      ]);
-
-      Code.processScheduledTasks();
-
-      expect(mockFetch).not.toHaveBeenCalled();
-    });
-  });
 
   describe('isValidTask', () => {
     it('should return true for valid date and text', () => {
@@ -140,35 +92,7 @@ describe('Code.js', () => {
     });
   });
 
-  describe('getTargetTimeToday', () => {
-    it('should return a date with today\'s year/month/day and scheduled hour/min/sec', () => {
-      const now = new Date('2023-12-25T10:00:00');
-      const scheduled = new Date('2000-01-01T15:30:45');
-      const result = Code.getTargetTimeToday(now, scheduled);
 
-      expect(result.getFullYear()).toBe(2023);
-      expect(result.getMonth()).toBe(11); // December is 11
-      expect(result.getDate()).toBe(25);
-      expect(result.getHours()).toBe(15);
-      expect(result.getMinutes()).toBe(30);
-      expect(result.getSeconds()).toBe(45);
-      expect(result.getMilliseconds()).toBe(0);
-    });
-  });
-
-  describe('isTimeWithinThreshold', () => {
-    it('should return true if difference is within threshold', () => {
-      const now = new Date(100000);
-      const target = new Date(100000 + Code.THRESHOLD);
-      expect(Code.isTimeWithinThreshold(now, target, Code.THRESHOLD)).toBe(true);
-    });
-
-    it('should return false if difference exceeds threshold', () => {
-      const now = new Date(100000);
-      const target = new Date(100001 + Code.THRESHOLD);
-      expect(Code.isTimeWithinThreshold(now, target, Code.THRESHOLD)).toBe(false);
-    });
-  });
 
   describe('buildSpeakingMessage', () => {
     it('should format message correctly', () => {
@@ -188,17 +112,6 @@ describe('Code.js', () => {
     });
   });
 
-  describe('callSpeakerApi', () => {
-    it('should call fetch with correct URL', () => {
-      mockGetProperty.mockImplementation(key =>
-        key === 'SPEAKER_API_URL' ? 'http://home-api.example/speak/-s/' : null
-      );
-      mockFetch.mockReturnValue({ response: 'ok' });
-      const message = 'テスト';
-      Code.callSpeakerApi(message);
-      expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining(encodeURIComponent(message)), expect.anything());
-    });
-  });
 
   describe('callGroq', () => {
     it('should return content from Groq API on success and strip think tags', () => {

@@ -12,18 +12,6 @@ export const getSpeakerApiUrl = () => {
 };
 
 /**
- * Allow time difference (35 seconds)
- */
-export const THRESHOLD = 35 * 1000;
-
-/**
- * Main entry point for the script
- */
-export function myFunction() {
-  processScheduledTasks();
-}
-
-/**
  * Handles GET requests and returns scheduled tasks as JSON
  */
 export function doGet() {
@@ -42,32 +30,6 @@ export function doGet() {
 }
 
 /**
- * Reads the spreadsheet and processes tasks that should be spoken
- */
-export function processScheduledTasks() {
-  const now = new Date();
-  const sheet = SpreadsheetApp.getActiveSheet();
-  const rows = sheet.getDataRange().getValues();
-
-  rows.forEach((row, index) => {
-    const [scheduledTime, messageText] = row;
-    if (!isValidTask(scheduledTime, messageText)) {
-      return;
-    }
-
-    const targetTime = getTargetTimeToday(now, scheduledTime);
-    if (!isTimeWithinThreshold(now, targetTime, THRESHOLD)) {
-      return;
-    }
-
-    const message = buildSpeakingMessage(targetTime, messageText);
-    const response = callSpeakerApi(message);
-
-    Logger.log(`Response (${response.getResponseCode()}): ${response.getContentText()} : ${message}`);
-  });
-}
-
-/**
  * Validates if the row contains a valid date and message text
  * @param {any} scheduledTime
  * @param {any} messageText
@@ -75,34 +37,6 @@ export function processScheduledTasks() {
  */
 export function isValidTask(scheduledTime, messageText) {
   return (scheduledTime instanceof Date) && !!messageText;
-}
-
-/**
- * Creates a Date object for today with the hours, minutes, and seconds from the scheduled time
- * @param {Date} now
- * @param {Date} scheduledTime
- * @returns {Date}
- */
-export function getTargetTimeToday(now, scheduledTime) {
-  const target = new Date(now);
-  target.setHours(
-    scheduledTime.getHours(),
-    scheduledTime.getMinutes(),
-    scheduledTime.getSeconds(),
-    0
-  );
-  return target;
-}
-
-/**
- * Checks if the difference between now and target time is within the threshold
- * @param {Date} now
- * @param {Date} targetTime
- * @param {number} threshold
- * @returns {boolean}
- */
-export function isTimeWithinThreshold(now, targetTime, threshold) {
-  return Math.abs(now.getTime() - targetTime.getTime()) <= threshold;
 }
 
 /**
@@ -116,21 +50,6 @@ export function buildSpeakingMessage(time, text) {
   const minute = time.getMinutes();
   const minutePart = minute ? `${minute}分` : 'ちょうど';
   return `${hour}時${minutePart}です。${text}`;
-}
-
-/**
- * Calls the speaker API with the encoded message
- * @param {string} message
- * @returns {GoogleAppsScript.URL_Fetch.HTTPResponse}
- */
-export function callSpeakerApi(message) {
-  return UrlFetchApp.fetch(
-    getSpeakerApiUrl() + encodeURIComponent(message),
-    {
-      method: 'get',
-      muteHttpExceptions: true,
-    }
-  );
 }
 
 /**
@@ -215,9 +134,10 @@ export function callGroq(prompt) {
  *   ALARM_SYNC_TOKEN  the same value as the alarm project's
  *                     SYNC_TOKEN property
  * Setup: run setupTimetableSync() once (installs an on-edit
- * trigger and an hourly trigger, then syncs immediately). After
- * verifying the rules in the alarm app, run stopTimetableFiring()
- * to retire this script's own firing trigger.
+ * trigger and an hourly trigger, then syncs immediately). This
+ * script no longer fires the announcements itself: its firing
+ * trigger and firing code were retired in November 2026, once the
+ * alarm app had taken over and proved stable.
  */
 
 /**
@@ -355,9 +275,7 @@ export function syncTimetableToAlarm() {
 
 /**
  * One-time setup: (re)installs the sync triggers — on sheet edit
- * and hourly — and runs the first sync. This script's own firing
- * trigger is left untouched; retire it with stopTimetableFiring()
- * once the alarm rules look right.
+ * and hourly — and runs the first sync.
  */
 export function setupTimetableSync() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
@@ -369,23 +287,6 @@ export function setupTimetableSync() {
   ScriptApp.newTrigger('syncTimetableToAlarm').forSpreadsheet(spreadsheet).onEdit().create();
   ScriptApp.newTrigger('syncTimetableToAlarm').timeBased().everyHours(1).create();
   syncTimetableToAlarm();
-}
-
-/**
- * Cutover step: removes this script's own firing triggers so only
- * the alarm app speaks the announcements. Returns how many were
- * removed.
- */
-export function stopTimetableFiring() {
-  let removed = 0;
-  ScriptApp.getProjectTriggers().forEach((trigger) => {
-    if (trigger.getHandlerFunction() === 'myFunction') {
-      ScriptApp.deleteTrigger(trigger);
-      removed += 1;
-    }
-  });
-  Logger.log(`timetable firing triggers removed: ${removed}`);
-  return removed;
 }
 
 /**
