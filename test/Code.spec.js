@@ -331,7 +331,7 @@ describe('Code.js', () => {
     it('builds a wire-form speech command from the speaker API URL', () => {
       expect(
         Code.buildSyncSpeechCommand(
-          'http://a.ze.gs/google-home-speaker-wrapper/-h/192.168.1.22/-v/60/-s/',
+          'https://a.ze.gs/google-home-speaker-wrapper/-h/192.168.1.22/-v/60/-s/',
           '7時ちょうどです。朝ごはんです'
         )
       ).toBe(
