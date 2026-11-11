@@ -175,7 +175,7 @@ describe('Code.js', () => {
     });
 
     it('should return error message on failure', () => {
-      mockGetProperty.mockReturnValue('test-api-key');
+      mockGetProperty.mockImplementation(key => (key === 'GROQ_GAS_URL' ? null : 'test-api-key'));
       mockFetch.mockImplementation(() => {
         throw new Error('Fetch failed');
       });
@@ -186,7 +186,7 @@ describe('Code.js', () => {
     });
 
     it('should return error message on invalid JSON response', () => {
-      mockGetProperty.mockReturnValue('test-api-key');
+      mockGetProperty.mockImplementation(key => (key === 'GROQ_GAS_URL' ? null : 'test-api-key'));
       mockFetch.mockReturnValue({
         getContentText: () => 'invalid json'
       });
@@ -197,7 +197,7 @@ describe('Code.js', () => {
     });
 
     it('should return API error message when Groq API returns an error payload', () => {
-      mockGetProperty.mockReturnValue('test-api-key');
+      mockGetProperty.mockImplementation(key => (key === 'GROQ_GAS_URL' ? null : 'test-api-key'));
       mockFetch.mockReturnValue({
         getContentText: () => JSON.stringify({
           error: { message: 'Invalid API key or rate limit exceeded' }
@@ -210,7 +210,7 @@ describe('Code.js', () => {
     });
 
     it('should return stringified error object if error message is missing', () => {
-      mockGetProperty.mockReturnValue('test-api-key');
+      mockGetProperty.mockImplementation(key => (key === 'GROQ_GAS_URL' ? null : 'test-api-key'));
       mockFetch.mockReturnValue({
         getContentText: () => JSON.stringify({
           error: { code: 500 }
@@ -223,7 +223,7 @@ describe('Code.js', () => {
     });
 
     it('should return error message when response format is missing choices', () => {
-      mockGetProperty.mockReturnValue('test-api-key');
+      mockGetProperty.mockImplementation(key => (key === 'GROQ_GAS_URL' ? null : 'test-api-key'));
       mockFetch.mockReturnValue({
         getContentText: () => JSON.stringify({})
       });
@@ -232,7 +232,65 @@ describe('Code.js', () => {
 
       expect(result).toBe('Error: Invalid response format from Groq API');
     });
+    it('should call the groq-gas wrapper when GROQ_GAS_URL is set', () => {
+      mockGetProperty.mockImplementation(key => {
+        if (key === 'GROQ_GAS_URL') return 'https://example.com/groq-gas/exec';
+        return null;
+      });
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({ answer: '<think>thinking</think>Rephrased text', cached: false })
+      });
+
+      const result = Code.callGroq('test prompt');
+
+      expect(result).toBe('Rephrased text');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://example.com/groq-gas/exec',
+        expect.objectContaining({
+          method: 'post',
+          contentType: 'application/json',
+          payload: JSON.stringify({ p: 'test prompt' })
+        })
+      );
+    });
+
+    it('should return wrapper error message when groq-gas returns an error string', () => {
+      mockGetProperty.mockImplementation(key => (key === 'GROQ_GAS_URL' ? 'https://example.com/groq-gas/exec' : null));
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({ error: "Parameter 'p' is required." })
+      });
+
+      expect(Code.callGroq('test prompt')).toBe("Error: Parameter 'p' is required.");
+    });
+
+    it('should stringify a non-string wrapper error', () => {
+      mockGetProperty.mockImplementation(key => (key === 'GROQ_GAS_URL' ? 'https://example.com/groq-gas/exec' : null));
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({ error: { code: 500 } })
+      });
+
+      expect(Code.callGroq('test prompt')).toBe('Error: {"code":500}');
+    });
+
+    it('should return error when the wrapper response has no answer', () => {
+      mockGetProperty.mockImplementation(key => (key === 'GROQ_GAS_URL' ? 'https://example.com/groq-gas/exec' : null));
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({})
+      });
+
+      expect(Code.callGroq('test prompt')).toBe('Error: Invalid response format from groq-gas');
+    });
+
+    it('should return error message when the wrapper fetch fails', () => {
+      mockGetProperty.mockImplementation(key => (key === 'GROQ_GAS_URL' ? 'https://example.com/groq-gas/exec' : null));
+      mockFetch.mockImplementation(() => {
+        throw new Error('Fetch failed');
+      });
+
+      expect(Code.callGroq('test prompt')).toBe('Error: Error: Fetch failed');
+    });
   });
+
 
   describe('listGroqModels', () => {
     it('should fetch models list and log response content', () => {

@@ -39,10 +39,10 @@ A Google Apps Script (GAS) project that keeps a spreadsheet of scheduled spoken 
    clasp login
    clasp create --title "Groq GAS Scheduled Tasks" --type sheets
    ```
-2. Set the `GROQ_API_KEY` in your Script Properties:
+2. Set the Groq access in your Script Properties:
    - Go to Project Settings in the GAS Editor.
-   - Add a property named `GROQ_API_KEY` with your Groq API key.
-   - (Optional) Add a property named `GROQ_MODEL` to specify a model (defaults to `llama-3.1-8b-instant`).
+   - Add a property named `GROQ_GAS_URL` with the groq-gas wrapper's /exec URL (preferred; the API key and model then live in groq-gas).
+   - (Fallback) Without `GROQ_GAS_URL`, add a property named `GROQ_API_KEY` with your Groq API key, and optionally `GROQ_MODEL` to specify a model (defaults to `llama-3.1-8b-instant`).
 
 ## Development
 
@@ -82,7 +82,8 @@ not in this repository:
 
 - `SPEAKER_API_URL`: URL prefix of the speaker API (contains a home
   server host and a LAN address).
-- `GROQ_API_KEY`, `GROQ_MODEL`: for the Groq rephrasing feature.
+- `GROQ_GAS_URL`: /exec URL of the groq-gas wrapper used for the Groq rephrasing feature (preferred).
+- `GROQ_API_KEY`, `GROQ_MODEL`: fallback for the rephrasing feature, used only when `GROQ_GAS_URL` is not set.
 - `ALARM_EXEC_URL`, `ALARM_SYNC_TOKEN`: for the alarm sync below.
   The token must match the alarm project's `SYNC_TOKEN` property.
 

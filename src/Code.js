@@ -81,10 +81,45 @@ export function refreshMessageText() {
 }
 
 /**
- * Groq API call
+ * Groq call.
+ * Prefers the shared groq-gas wrapper (script property GROQ_GAS_URL,
+ * the wrapper's /exec URL) so the Groq API key and model live in one
+ * place. Falls back to a direct Groq API call using GROQ_API_KEY /
+ * GROQ_MODEL when GROQ_GAS_URL is not set.
  */
 export function callGroq(prompt) {
   const scriptProperties = PropertiesService.getScriptProperties();
+  const wrapperUrl = scriptProperties.getProperty('GROQ_GAS_URL');
+  if (wrapperUrl) {
+    return callGroqViaWrapper(wrapperUrl, prompt);
+  }
+  return callGroqDirect(scriptProperties, prompt);
+}
+
+function callGroqViaWrapper(wrapperUrl, prompt) {
+  const options = {
+    "method": "post",
+    "contentType": "application/json",
+    "payload": JSON.stringify({ "p": prompt }),
+    "muteHttpExceptions": true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(wrapperUrl, options);
+    const json = JSON.parse(response.getContentText());
+    if (json && json.error) {
+      return "Error: " + (typeof json.error === 'string' ? json.error : JSON.stringify(json.error));
+    }
+    if (json && typeof json.answer === 'string') {
+      return json.answer.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    }
+    return "Error: Invalid response format from groq-gas";
+  } catch (e) {
+    return "Error: " + e.toString();
+  }
+}
+
+function callGroqDirect(scriptProperties, prompt) {
   const apiKey = scriptProperties.getProperty('GROQ_API_KEY');
   const model = scriptProperties.getProperty('GROQ_MODEL') || "llama-3.1-8b-instant";
   const apiUrl = "https://api.groq.com/openai/v1/chat/completions";
