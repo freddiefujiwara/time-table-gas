@@ -1,5 +1,5 @@
 {
-  "name": "groq-gas",
+  "name": "time-table-gas",
   "scripts": {
     "test": "vitest run --coverage",
     "build": "node build.js",
