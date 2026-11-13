@@ -56,21 +56,13 @@ describe('Code.js', () => {
   });
 
   describe('doGet', () => {
-    it('should return JSON representation of valid tasks', () => {
-      const date1 = new Date('2023-10-01T10:00:00Z');
-      const date2 = new Date('2023-10-01T12:00:00Z');
-      mockGetValues.mockReturnValue([
-        [date1, 'Task 1'],
-        [date2, 'Task 2'],
-        ['invalid', 'skip me'],
-      ]);
-
+    it('is disabled and never reads the sheet', () => {
       Code.doGet();
 
-      expect(mockCreateTextOutput).toHaveBeenCalledWith(JSON.stringify([
-        { scheduledTime: date1.toISOString(), messageText: 'Task 1' },
-        { scheduledTime: date2.toISOString(), messageText: 'Task 2' },
-      ]));
+      expect(mockGetValues).not.toHaveBeenCalled();
+      expect(mockCreateTextOutput).toHaveBeenCalledWith(
+        JSON.stringify({ ok: false, error: 'this endpoint is disabled' })
+      );
       expect(mockSetMimeType).toHaveBeenCalledWith('application/json');
     });
   });
@@ -389,11 +381,11 @@ describe('Code.js', () => {
     it('builds a wire-form speech command from the speaker API URL', () => {
       expect(
         Code.buildSyncSpeechCommand(
-          'https://a.ze.gs/google-home-speaker-wrapper/-h/192.168.1.22/-v/60/-s/',
+          'https://home-api.example/google-home-speaker-wrapper/-h/192.0.2.22/-v/60/-s/',
           '7時ちょうどです。朝ごはんです'
         )
       ).toBe(
-        'google-home-speaker-wrapper -h 192.168.1.22 -v 60 -s ' +
+        'google-home-speaker-wrapper -h 192.0.2.22 -v 60 -s ' +
           encodeURIComponent('7時ちょうどです。朝ごはんです')
       );
       expect(Code.buildSyncSpeechCommand('http://home-api.example/speak/-s/', 'x')).toBe(

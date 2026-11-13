@@ -12,21 +12,17 @@ export const getSpeakerApiUrl = () => {
 };
 
 /**
- * Handles GET requests and returns scheduled tasks as JSON
+ * The web endpoint used to return the whole announcement timetable —
+ * the household's daily routine — to anyone who knew the /exec URL,
+ * with no authentication. Nothing in the current system consumes it
+ * (the timetable is edited in the sheet and synced to alarm-gas by the
+ * trigger-driven path below), so it is disabled. The stub stays so old
+ * callers get a clear error instead of the data.
  */
 export function doGet() {
-  const sheet = SpreadsheetApp.getActiveSheet();
-  const rows = sheet.getDataRange().getValues();
-
-  const tasks = rows
-    .filter(([scheduledTime, messageText]) => isValidTask(scheduledTime, messageText))
-    .map(([scheduledTime, messageText]) => ({
-      scheduledTime: scheduledTime.toISOString(),
-      messageText
-    }));
-
-  return ContentService.createTextOutput(JSON.stringify(tasks))
-    .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(
+    JSON.stringify({ ok: false, error: 'this endpoint is disabled' })
+  ).setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
