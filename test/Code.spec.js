@@ -246,6 +246,27 @@ describe('Code.js', () => {
       );
     });
 
+    it('should send the GROQ_GAS_TOKEN to the wrapper when it is set', () => {
+      mockGetProperty.mockImplementation(key => {
+        if (key === 'GROQ_GAS_URL') return 'https://example.com/groq-gas/exec';
+        if (key === 'GROQ_GAS_TOKEN') return 'test-token';
+        return null;
+      });
+      mockFetch.mockReturnValue({
+        getContentText: () => JSON.stringify({ answer: 'Rephrased text', cached: false })
+      });
+
+      const result = Code.callGroq('test prompt');
+
+      expect(result).toBe('Rephrased text');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://example.com/groq-gas/exec',
+        expect.objectContaining({
+          payload: JSON.stringify({ p: 'test prompt', token: 'test-token' })
+        })
+      );
+    });
+
     it('should return wrapper error message when groq-gas returns an error string', () => {
       mockGetProperty.mockImplementation(key => (key === 'GROQ_GAS_URL' ? 'https://example.com/groq-gas/exec' : null));
       mockFetch.mockReturnValue({

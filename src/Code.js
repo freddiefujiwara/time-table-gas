@@ -87,16 +87,23 @@ export function callGroq(prompt) {
   const scriptProperties = PropertiesService.getScriptProperties();
   const wrapperUrl = scriptProperties.getProperty('GROQ_GAS_URL');
   if (wrapperUrl) {
-    return callGroqViaWrapper(wrapperUrl, prompt);
+    return callGroqViaWrapper(wrapperUrl, prompt, scriptProperties);
   }
   return callGroqDirect(scriptProperties, prompt);
 }
 
-function callGroqViaWrapper(wrapperUrl, prompt) {
+function callGroqViaWrapper(wrapperUrl, prompt, scriptProperties) {
+  const payload = { "p": prompt };
+  // groq-gas requires the shared token from the GROQ_GAS_TOKEN script
+  // property; send it when configured.
+  const token = scriptProperties.getProperty('GROQ_GAS_TOKEN');
+  if (token) {
+    payload.token = token;
+  }
   const options = {
     "method": "post",
     "contentType": "application/json",
-    "payload": JSON.stringify({ "p": prompt }),
+    "payload": JSON.stringify(payload),
     "muteHttpExceptions": true
   };
 
