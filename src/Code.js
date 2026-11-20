@@ -26,13 +26,54 @@ export function doGet() {
 }
 
 /**
+ * Total text coercion for values that arrive from outside this
+ * script (sheet cells, API payloads): strings pass through, other
+ * scalars stringify exactly as String() would, and a value whose
+ * toString is not callable reads as empty instead of throwing and
+ * taking the whole refresh / sync down with it.
+ */
+function cellText_(value) {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (value === null || value === undefined) {
+    return '';
+  }
+  try {
+    return String(value);
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * Total error rendering for catch blocks: a thrown value whose
+ * toString is not callable must not make the error handler itself
+ * throw. Real errors render exactly as e.toString() did.
+ */
+function errorText_(e) {
+  try {
+    return e.toString();
+  } catch (ignored) {
+    return 'Unknown error';
+  }
+}
+
+/**
  * Validates if the row contains a valid date and message text
  * @param {any} scheduledTime
  * @param {any} messageText
  * @returns {boolean}
  */
 export function isValidTask(scheduledTime, messageText) {
-  return (scheduledTime instanceof Date) && !!messageText;
+  // An Invalid Date is still `instanceof Date`; without the NaN
+  // check it produced a rule keyed "NaN:NaN" announcing
+  // "12時ちょうどです" — a fabricated announcement.
+  return (
+    (scheduledTime instanceof Date) &&
+    !Number.isNaN(scheduledTime.getTime()) &&
+    !!messageText
+  );
 }
 
 /**
@@ -65,7 +106,10 @@ export function refreshMessageText() {
     if (cleaned !== '') {
       const rephrased = callGroq(`${cleaned}」を似たニュアンスで言い換えた文言のみ返せ。解説不要。`);
       Logger.log(`${cleaned} -> ${rephrased}`);
-      if (typeof rephrased === 'string' && rephrased.startsWith("Error:")) {
+      // An answer that is only a <think> block strips down to '';
+      // writing that back would erase the hand-written message, so
+      // an empty rephrasing keeps the row, like an Error: result.
+      if (typeof rephrased !== 'string' || rephrased === '' || rephrased.startsWith("Error:")) {
         return row;
       }
       return [scheduledTime, rephrased, ...rest];
@@ -118,7 +162,7 @@ function callGroqViaWrapper(wrapperUrl, prompt, scriptProperties) {
     }
     return "Error: Invalid response format from groq-gas";
   } catch (e) {
-    return "Error: " + e.toString();
+    return "Error: " + errorText_(e);
   }
 }
 
@@ -153,7 +197,7 @@ function callGroqDirect(scriptProperties, prompt) {
     }
     return "Error: Invalid response format from Groq API";
   } catch (e) {
-    return "Error: " + e.toString();
+    return "Error: " + errorText_(e);
   }
 }
 
@@ -187,7 +231,14 @@ function callGroqDirect(scriptProperties, prompt) {
 export function buildSyncSpeechCommand(apiUrl, message) {
   const path = String(apiUrl || '').replace(/^https?:\/\/[^/]+/i, '');
   const segments = path.split('/').filter((segment) => segment.length > 0);
-  return `${segments.join(' ')} ${encodeURIComponent(message)}`;
+  // encodeURIComponent throws URIError on a lone surrogate; speak it
+  // as U+FFFD instead of letting one bad character kill the sync.
+  // Well-formed text (pairs included) is byte-identical.
+  const spoken = cellText_(message).replace(
+    /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+    '\uFFFD'
+  );
+  return `${segments.join(' ')} ${encodeURIComponent(spoken)}`;
 }
 
 /**
@@ -198,13 +249,19 @@ export function buildSyncSpeechCommand(apiUrl, message) {
  */
 export function desiredSyncRules(rows, apiUrl) {
   const desired = new Map();
-  (rows || []).forEach(([scheduledTime, messageText]) => {
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    // One deformed row must not kill the whole sync.
+    if (!Array.isArray(row)) {
+      return;
+    }
+    const [scheduledTime, messageText] = row;
     if (!isValidTask(scheduledTime, messageText)) {
       return;
     }
     const hour = String(scheduledTime.getHours()).padStart(2, '0');
     const minute = String(scheduledTime.getMinutes()).padStart(2, '0');
-    const text = String(messageText).trim() === '' ? '' : messageText;
+    const rawText = cellText_(messageText);
+    const text = rawText.trim() === '' ? '' : rawText;
     const message = buildSpeakingMessage(scheduledTime, text);
     desired.set(`${hour}:${minute}`, {
       command: buildSyncSpeechCommand(apiUrl, message),
@@ -220,7 +277,11 @@ export function desiredSyncRules(rows, apiUrl) {
  * anything else is deleted and (when still desired) recreated.
  */
 export function planSync(desired, stored, currentRules) {
-  const currentIds = new Set((currentRules || []).map((rule) => rule.id));
+  const currentIds = new Set(
+    (Array.isArray(currentRules) ? currentRules : []).map((rule) =>
+      rule ? rule.id : undefined
+    )
+  );
   const toDelete = [];
   const toCreate = [];
   const kept = {};
@@ -237,7 +298,7 @@ export function planSync(desired, stored, currentRules) {
   });
   Object.entries(stored || {}).forEach(([time, prev]) => {
     if (!desired || !(time in desired)) {
-      if (currentIds.has(prev.id)) {
+      if (prev && currentIds.has(prev.id)) {
         toDelete.push(prev.id);
       }
     }
@@ -347,7 +408,7 @@ export function listGroqModels() {
     Logger.log("Available Models: " + content);
     return content;
   } catch (e) {
-    const errorMsg = "Error: " + e.toString();
+    const errorMsg = "Error: " + errorText_(e);
     Logger.log(errorMsg);
     return errorMsg;
   }
